@@ -109,6 +109,26 @@ setup_data() {
     log "  ${C_YELLOW}note${C_RESET}: ANALYZE TABLE events did not succeed; columns[].ndv may be empty"
   fi
 
+  # --- wait for partition RowCount to be reported (drives tablet total_rows) ---
+  # Doris updates SHOW PARTITIONS' RowCount asynchronously (BE->FE tablet report),
+  # so right after a load it can still read 0 while the rows are already queryable.
+  # The tablet suite asserts total_rows>0 (summed from SHOW PARTITIONS), so poll the
+  # exact same value until it materializes. Bounded by ROWCOUNT_TIMEOUT (default
+  # 120s); on timeout we proceed and let the assertion surface the lag, never hang.
+  local rc_timeout="${ROWCOUNT_TIMEOUT:-120}" rc_waited=0 rc_rows="" rc_ok=0
+  while :; do
+    _run_dcli --format json tablet "$db.events"
+    rc_rows="$(jget '.total_rows')"
+    case "$rc_rows" in [1-9]*) rc_ok=1; break;; esac
+    [ "$rc_waited" -ge "$rc_timeout" ] && break
+    sleep 3; rc_waited=$((rc_waited + 3))
+  done
+  if [ "$rc_ok" = 1 ]; then
+    log "  events RowCount reported (total_rows=$rc_rows after ${rc_waited}s)"
+  else
+    log "  ${C_YELLOW}note${C_RESET}: events total_rows still 0 after ${rc_waited}s — tablet 'total_rows>0' may FAIL (SHOW PARTITIONS RowCount report lag)"
+  fi
+
   log "${C_GREEN}  setup complete${C_RESET}"
 }
 
