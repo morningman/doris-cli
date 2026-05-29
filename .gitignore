@@ -1,1 +1,8 @@
 .DS_Store
+
+# Rust build artifacts
+/target/
+
+# e2e test harness: local connection config + run logs
+/tests/e2e/cluster.env
+/tests/e2e/results/
