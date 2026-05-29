@@ -71,7 +71,7 @@ fn build_fallback_note(failure: &super::fetch::FetchFailure) -> String {
         .any(|a| a.result.starts_with("Connection failed"));
     if any_unreachable {
         return format!(
-            "HTTP endpoint unreachable on configured port. VeloDB Cloud uses \
+            "HTTP endpoint unreachable on configured port. Cloud deployments use \
              --http-port 8080; self-hosted Doris uses 8030. Run `{} auth status` \
              to verify, or re-add auth with the right port.",
             failure.binary

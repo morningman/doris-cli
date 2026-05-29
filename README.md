@@ -1,6 +1,6 @@
-# doris-cli
+# Apache Doris CLI
 
-A fast, scriptable CLI for the **Apache Doris / VeloDB kernel**. It connects over the
+A fast, scriptable CLI for the **Apache Doris kernel**. It connects over the
 MySQL protocol (+ the FE HTTP API), executes, and returns **structured JSON** — a
 "tool, not a brain": all the intelligence lives in the layer above (an agent, a
 script, your shell). Every command prints machine-readable output and exits; there
@@ -93,7 +93,7 @@ doriscli auth remove <name>
 ```
 
 `auth add` probes the FE HTTP port and, if it doesn't answer, suggests common
-alternatives (8080 for VeloDB Cloud FEs, 8030/8040 for Apache Doris) so `profile`
+alternatives (8080 for cloud FEs, 8030/8040 for self-hosted Apache Doris) so `profile`
 commands work later.
 
 ### `sql` — execute queries
@@ -193,7 +193,7 @@ DORIS_HOST=fe.internal DORIS_USER=admin DORIS_PASSWORD=*** \
 ## Connecting to a cloud-hosted kernel
 
 doris-cli talks to any reachable Doris FE — including a cloud cluster — as long as
-you give it the resolved host/port. Compute-group routing (VeloDB Cloud) is handled
+you give it the resolved host/port. Compute-group routing is handled
 by `--init-sql` (or `DORIS_INIT_SQL`), which runs `USE @<compute-group>` right after
 connecting:
 

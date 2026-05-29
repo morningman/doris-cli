@@ -1,7 +1,7 @@
 use crate::product::ProductProfile;
 
 #[derive(Debug, thiserror::Error)]
-pub enum VeloError {
+pub enum DorisError {
     #[error("Connection failed: {message}")]
     Connection {
         message: String,
@@ -32,53 +32,53 @@ pub enum VeloError {
     Io(#[from] std::io::Error),
 }
 
-impl VeloError {
+impl DorisError {
     pub fn connection_with_source(
         msg: impl Into<String>,
         src: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
-        VeloError::Connection {
+        DorisError::Connection {
             message: msg.into(),
             source: Some(Box::new(src)),
         }
     }
 
     pub fn sql(msg: impl Into<String>) -> Self {
-        VeloError::Sql {
+        DorisError::Sql {
             message: msg.into(),
         }
     }
 
     pub fn config(msg: impl Into<String>) -> Self {
-        VeloError::Config(msg.into())
+        DorisError::Config(msg.into())
     }
 
     #[allow(dead_code)]
     pub fn parse(msg: impl Into<String>) -> Self {
-        VeloError::Parse(msg.into())
+        DorisError::Parse(msg.into())
     }
 }
 
-/// Result type alias for VeloError
-pub type VeloResult<T> = Result<T, VeloError>;
+/// Result type alias for DorisError
+pub type DorisResult<T> = Result<T, DorisError>;
 
-/// Format a VeloError for user-facing display
-impl VeloError {
+/// Format a DorisError for user-facing display
+impl DorisError {
     pub fn user_message(&self, product: &ProductProfile) -> String {
         match self {
-            VeloError::Connection { message, .. } => {
+            DorisError::Connection { message, .. } => {
                 format!(
                     "Error: {message}\n\nCheck your connection settings with `{} auth status`.",
                     product.binary
                 )
             }
-            VeloError::EnvNotFound { name } => {
+            DorisError::EnvNotFound { name } => {
                 format!(
                     "Error: Environment '{name}' not found.\n\nRun `{} auth list` to see available environments.",
                     product.binary
                 )
             }
-            VeloError::AuthRequired => {
+            DorisError::AuthRequired => {
                 format!(
                     "Error: No authentication configured.\n\nRun `{} auth add <name> --host <host> --user <user> --password <pass>` to get started.",
                     product.binary

@@ -10,7 +10,7 @@
 //! on the connection struct and let Drop abort the accept task.
 
 use crate::config::Socks5Config;
-use crate::error::{VeloError, VeloResult};
+use crate::error::{DorisError, DorisResult};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -28,15 +28,15 @@ impl Socks5Forwarder {
         socks5: &Socks5Config,
         target_host: String,
         target_port: u16,
-    ) -> VeloResult<Self> {
+    ) -> DorisResult<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").await.map_err(|e| {
-            VeloError::connection_with_source(
+            DorisError::connection_with_source(
                 "Failed to bind SOCKS5 forwarder loopback listener".to_string(),
                 e,
             )
         })?;
         let local_addr = listener.local_addr().map_err(|e| {
-            VeloError::connection_with_source(
+            DorisError::connection_with_source(
                 "Failed to read SOCKS5 forwarder local addr".to_string(),
                 e,
             )
@@ -65,7 +65,7 @@ impl Socks5Forwarder {
                         Ok(s) => s,
                         Err(e) => {
                             tracing::warn!(
-                                target = "velo::socks5",
+                                target = "doris::socks5",
                                 "SOCKS5 dial to {host}:{port} via {proxy_addr} failed: {e}"
                             );
                             return;

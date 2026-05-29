@@ -52,7 +52,7 @@ impl fmt::Display for FetchFailure {
             "Could not fetch profile '{}'.\n\
              REST v2 with is_all_node=true aggregates profiles across FEs server-side,\n\
              so this usually means the HTTP port is wrong or the profile has been evicted.\n\
-             VeloDB Cloud uses --http-port 8080; self-hosted Doris uses 8030.\n\
+             Cloud deployments use --http-port 8080; self-hosted Doris uses 8030.\n\
              Run `{} auth status` to check connectivity.\n\
              Attempts:\n{}",
             self.query_id,

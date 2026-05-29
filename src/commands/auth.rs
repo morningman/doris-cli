@@ -95,7 +95,7 @@ async fn run_add(args: AddArgs, store: &mut Store) -> anyhow::Result<Value> {
 }
 
 fn common_http_ports_except(configured: u16) -> Vec<u16> {
-    // 8080: VeloDB Cloud FE HTTP (routed through Stream Load port).
+    // 8080: Cloud FE HTTP (routed through Stream Load port).
     // 8030: Apache Doris / self-hosted default.
     [8080, 8030, 8040]
         .into_iter()

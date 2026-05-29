@@ -1,5 +1,5 @@
 use crate::config::Environment;
-use crate::error::{VeloError, VeloResult};
+use crate::error::{DorisError, DorisResult};
 use serde_json::Value;
 
 pub struct HttpConnection {
@@ -69,7 +69,7 @@ impl HttpConnection {
                 }
                 Err(e) => {
                     tracing::warn!(
-                        target = "velo::socks5",
+                        target = "doris::socks5",
                         "Invalid SOCKS5 proxy URL '{proxy_url}': {e} — HTTP will go direct"
                     );
                 }
@@ -164,10 +164,10 @@ fn short_err(e: &reqwest::Error) -> String {
 }
 
 impl HttpConnection {
-    /// Fetch profile text via REST v2 Manager API (works on VeloDB Cloud port 8080).
+    /// Fetch profile text via REST v2 Manager API (works on cloud port 8080).
     /// Endpoint: GET /rest/v2/manager/query/profile/text/{query_id}?is_all_node=true
     /// Response: {"msg":"success","code":0,"data":{"profile":"Summary:\n..."}}
-    pub async fn get_profile_text_v2(&self, query_id: &str) -> VeloResult<String> {
+    pub async fn get_profile_text_v2(&self, query_id: &str) -> DorisResult<String> {
         let url = format!(
             "{}/rest/v2/manager/query/profile/text/{}?is_all_node=true",
             self.base_url, query_id
@@ -180,7 +180,7 @@ impl HttpConnection {
             .send()
             .await
             .map_err(|e| {
-                VeloError::connection_with_source(
+                DorisError::connection_with_source(
                     format!("REST v2 profile request failed: {url}"),
                     e,
                 )
@@ -189,10 +189,10 @@ impl HttpConnection {
         let status = resp.status().as_u16();
         if status != 200 {
             let body = resp.text().await.unwrap_or_default();
-            return Err(VeloError::Http { status, body });
+            return Err(DorisError::Http { status, body });
         }
 
-        let json: Value = resp.json().await.map_err(|e| VeloError::Http {
+        let json: Value = resp.json().await.map_err(|e| DorisError::Http {
             status,
             body: format!("Failed to parse JSON response: {e}"),
         })?;
@@ -205,7 +205,7 @@ impl HttpConnection {
                 .and_then(|v| v.as_str())
                 .or_else(|| json.get("msg").and_then(|v| v.as_str()))
                 .unwrap_or("Unknown error");
-            return Err(VeloError::Http {
+            return Err(DorisError::Http {
                 status,
                 body: msg.to_string(),
             });
@@ -216,12 +216,12 @@ impl HttpConnection {
             .and_then(|d| d.get("profile"))
             .and_then(|p| p.as_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| VeloError::Parse("No 'profile' field in REST v2 response".to_string()))
+            .ok_or_else(|| DorisError::Parse("No 'profile' field in REST v2 response".to_string()))
     }
 
     /// Fetch profile text from legacy FE HTTP API.
     /// Endpoint: GET /api/profile/text/{query_id}
-    pub async fn get_profile_text(&self, query_id: &str) -> VeloResult<String> {
+    pub async fn get_profile_text(&self, query_id: &str) -> DorisResult<String> {
         let url = format!("{}/api/profile/text/{}", self.base_url, query_id);
         let resp = self
             .client
@@ -230,17 +230,17 @@ impl HttpConnection {
             .send()
             .await
             .map_err(|e| {
-                VeloError::connection_with_source(format!("HTTP request failed: {url}"), e)
+                DorisError::connection_with_source(format!("HTTP request failed: {url}"), e)
             })?;
 
         let status = resp.status().as_u16();
-        let body = resp.text().await.map_err(|e| VeloError::Http {
+        let body = resp.text().await.map_err(|e| DorisError::Http {
             status,
             body: e.to_string(),
         })?;
 
         if status != 200 {
-            return Err(VeloError::Http { status, body });
+            return Err(DorisError::Http { status, body });
         }
 
         Ok(body)
@@ -249,7 +249,7 @@ impl HttpConnection {
     /// Fetch list of recent queries via REST v2 Manager API.
     /// Endpoint: GET /rest/v2/manager/query/query_info?is_all_node=true
     #[allow(dead_code)]
-    pub async fn get_query_list(&self) -> VeloResult<Value> {
+    pub async fn get_query_list(&self) -> DorisResult<Value> {
         let url = format!(
             "{}/rest/v2/manager/query/query_info?is_all_node=true",
             self.base_url
@@ -262,10 +262,10 @@ impl HttpConnection {
             .send()
             .await
             .map_err(|e| {
-                VeloError::connection_with_source(format!("REST v2 query list failed: {url}"), e)
+                DorisError::connection_with_source(format!("REST v2 query list failed: {url}"), e)
             })?;
 
-        let json: Value = resp.json().await.map_err(|e| VeloError::Http {
+        let json: Value = resp.json().await.map_err(|e| DorisError::Http {
             status: 0,
             body: format!("Failed to parse JSON: {e}"),
         })?;
@@ -275,7 +275,7 @@ impl HttpConnection {
 
     /// Test HTTP connectivity.
     #[allow(dead_code)]
-    pub async fn ping(&self) -> VeloResult<u128> {
+    pub async fn ping(&self) -> DorisResult<u128> {
         let start = std::time::Instant::now();
         let url = format!("{}/api/health", self.base_url);
         let _ = self

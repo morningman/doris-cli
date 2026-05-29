@@ -1,5 +1,5 @@
 use crate::config::environment::{Environment, EnvironmentConfig, EnvironmentCredentials};
-use crate::error::{VeloError, VeloResult};
+use crate::error::{DorisError, DorisResult};
 use crate::product::ProductProfile;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -78,32 +78,32 @@ impl Store {
 
     /// Load config from the product config directory (creates directory if needed).
     /// In stateless mode, returns an in-memory Store with no filesystem I/O.
-    pub fn load(product: &'static ProductProfile) -> VeloResult<Self> {
+    pub fn load(product: &'static ProductProfile) -> DorisResult<Self> {
         if Self::is_stateless(product) {
             return Ok(Self::stateless(product));
         }
 
         let config_dir = Self::config_dir(product)?;
         std::fs::create_dir_all(&config_dir)
-            .map_err(|e| VeloError::config(format!("Failed to create config directory: {e}")))?;
+            .map_err(|e| DorisError::config(format!("Failed to create config directory: {e}")))?;
 
         let config_path = config_dir.join("config.toml");
         let creds_path = config_dir.join("credentials.toml");
 
         let config: ConfigFile = if config_path.exists() {
             let text = std::fs::read_to_string(&config_path)
-                .map_err(|e| VeloError::config(format!("Failed to read config: {e}")))?;
+                .map_err(|e| DorisError::config(format!("Failed to read config: {e}")))?;
             toml::from_str(&text)
-                .map_err(|e| VeloError::config(format!("Invalid config.toml: {e}")))?
+                .map_err(|e| DorisError::config(format!("Invalid config.toml: {e}")))?
         } else {
             ConfigFile::default()
         };
 
         let credentials: CredentialsFile = if creds_path.exists() {
             let text = std::fs::read_to_string(&creds_path)
-                .map_err(|e| VeloError::config(format!("Failed to read credentials: {e}")))?;
+                .map_err(|e| DorisError::config(format!("Failed to read credentials: {e}")))?;
             toml::from_str(&text)
-                .map_err(|e| VeloError::config(format!("Invalid credentials.toml: {e}")))?
+                .map_err(|e| DorisError::config(format!("Invalid credentials.toml: {e}")))?
         } else {
             CredentialsFile::default()
         };
@@ -117,7 +117,7 @@ impl Store {
     }
 
     /// Resolve an environment by name, applying env var overrides.
-    pub fn resolve_env(&self, name: &str) -> VeloResult<Environment> {
+    pub fn resolve_env(&self, name: &str) -> DorisResult<Environment> {
         // Stateless shortcut — never touch config files.
         if Self::is_stateless(self.product) {
             return Ok(Self::resolve_stateless(self.product, name));
@@ -125,9 +125,9 @@ impl Store {
 
         let env_config = self.config.environments.get(name).ok_or_else(|| {
             if self.config.environments.is_empty() {
-                VeloError::AuthRequired
+                DorisError::AuthRequired
             } else {
-                VeloError::EnvNotFound {
+                DorisError::EnvNotFound {
                     name: name.to_string(),
                 }
             }
@@ -180,7 +180,7 @@ impl Store {
         name: &str,
         config: EnvironmentConfig,
         creds: EnvironmentCredentials,
-    ) -> VeloResult<()> {
+    ) -> DorisResult<()> {
         self.config.environments.insert(name.to_string(), config);
         self.credentials
             .environments
@@ -195,9 +195,9 @@ impl Store {
     }
 
     /// Set the default environment.
-    pub fn set_default(&mut self, name: &str) -> VeloResult<()> {
+    pub fn set_default(&mut self, name: &str) -> DorisResult<()> {
         if !self.config.environments.contains_key(name) {
-            return Err(VeloError::EnvNotFound {
+            return Err(DorisError::EnvNotFound {
                 name: name.to_string(),
             });
         }
@@ -216,7 +216,7 @@ impl Store {
     }
 
     /// Remove an environment.
-    pub fn remove_env(&mut self, name: &str) -> VeloResult<()> {
+    pub fn remove_env(&mut self, name: &str) -> DorisResult<()> {
         self.config.environments.remove(name);
         self.credentials.environments.remove(name);
         if self.config.default_env.as_deref() == Some(name) {
@@ -226,9 +226,9 @@ impl Store {
     }
 
     /// Save config and credentials to disk.
-    fn save(&self) -> VeloResult<()> {
+    fn save(&self) -> DorisResult<()> {
         let config_dir = self.config_dir.as_ref().ok_or_else(|| {
-            VeloError::config(format!(
+            DorisError::config(format!(
                 "Cannot modify config in stateless mode ({} + {} set). \
                      Unset those env vars to use {}/ config files.",
                 self.product.env_key("HOST"),
@@ -238,17 +238,17 @@ impl Store {
         })?;
 
         let config_text = toml::to_string_pretty(&self.config)
-            .map_err(|e| VeloError::config(format!("Failed to serialize config: {e}")))?;
+            .map_err(|e| DorisError::config(format!("Failed to serialize config: {e}")))?;
         let creds_text = toml::to_string_pretty(&self.credentials)
-            .map_err(|e| VeloError::config(format!("Failed to serialize credentials: {e}")))?;
+            .map_err(|e| DorisError::config(format!("Failed to serialize credentials: {e}")))?;
 
         let config_path = config_dir.join("config.toml");
         let creds_path = config_dir.join("credentials.toml");
 
         std::fs::write(&config_path, config_text)
-            .map_err(|e| VeloError::config(format!("Failed to write config: {e}")))?;
+            .map_err(|e| DorisError::config(format!("Failed to write config: {e}")))?;
         std::fs::write(&creds_path, creds_text)
-            .map_err(|e| VeloError::config(format!("Failed to write credentials: {e}")))?;
+            .map_err(|e| DorisError::config(format!("Failed to write credentials: {e}")))?;
 
         // Set restrictive permissions on credentials file (Unix only)
         #[cfg(unix)]
@@ -261,9 +261,9 @@ impl Store {
         Ok(())
     }
 
-    fn config_dir(product: &ProductProfile) -> VeloResult<PathBuf> {
+    fn config_dir(product: &ProductProfile) -> DorisResult<PathBuf> {
         let home =
-            dirs::home_dir().ok_or_else(|| VeloError::config("Cannot determine home directory"))?;
+            dirs::home_dir().ok_or_else(|| DorisError::config("Cannot determine home directory"))?;
         Ok(home.join(&product.config_dir))
     }
 }

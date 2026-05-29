@@ -1,6 +1,6 @@
 use crate::config::Environment;
 use crate::connection::socks5_forwarder::Socks5Forwarder;
-use crate::error::{VeloError, VeloResult};
+use crate::error::{DorisError, DorisResult};
 use mysql_async::prelude::*;
 use mysql_async::{Conn, Opts, OptsBuilder, Row, Value as MysqlValue};
 use serde_json::{Map, Value};
@@ -19,9 +19,9 @@ pub struct QueryResult {
 }
 
 impl MysqlConnection {
-    /// Connect to a Doris/VeloDB instance. Routes through SOCKS5 when `env.socks5`
+    /// Connect to a Doris instance. Routes through SOCKS5 when `env.socks5`
     /// is set, via a loopback forwarder (mysql_async 0.34 has no native proxy hook).
-    pub async fn connect(env: &Environment) -> VeloResult<Self> {
+    pub async fn connect(env: &Environment) -> DorisResult<Self> {
         let (dial_host, dial_port, forwarder, error_hint) = if let Some(s5) = &env.socks5 {
             let fwd = Socks5Forwarder::spawn(s5, env.host.clone(), env.mysql_port).await?;
             let port = fwd.local_addr.port();
@@ -40,7 +40,7 @@ impl MysqlConnection {
 
         let pool = mysql_async::Pool::new(Opts::from(opts));
         let conn = pool.get_conn().await.map_err(|e| {
-            VeloError::connection_with_source(
+            DorisError::connection_with_source(
                 format!(
                     "Failed to connect to {}:{} as '{}'{}",
                     env.host, env.mysql_port, env.user, error_hint
@@ -61,12 +61,12 @@ impl MysqlConnection {
     }
 
     /// Execute a SQL query and return structured results.
-    pub async fn query(&mut self, sql: &str) -> VeloResult<QueryResult> {
+    pub async fn query(&mut self, sql: &str) -> DorisResult<QueryResult> {
         let rows: Vec<Row> = self
             .conn
             .query(sql)
             .await
-            .map_err(|e| VeloError::sql(format!("{e}")))?;
+            .map_err(|e| DorisError::sql(format!("{e}")))?;
 
         if rows.is_empty() {
             return Ok(QueryResult {
@@ -99,16 +99,16 @@ impl MysqlConnection {
     }
 
     /// Execute a statement that doesn't return results (SET, USE, etc.).
-    pub async fn exec(&mut self, sql: &str) -> VeloResult<()> {
+    pub async fn exec(&mut self, sql: &str) -> DorisResult<()> {
         self.conn
             .query_drop(sql)
             .await
-            .map_err(|e| VeloError::sql(format!("{e}")))?;
+            .map_err(|e| DorisError::sql(format!("{e}")))?;
         Ok(())
     }
 
     /// Get the last query ID from the current session.
-    pub async fn last_query_id(&mut self) -> VeloResult<String> {
+    pub async fn last_query_id(&mut self) -> DorisResult<String> {
         let result = self.query("SELECT last_query_id()").await?;
         if let Some(row) = result.rows.first() {
             if let Some(Value::String(qid)) = row.values().next() {
@@ -119,7 +119,7 @@ impl MysqlConnection {
     }
 
     /// Test connection by running SELECT 1, returns latency in ms.
-    pub async fn ping(&mut self) -> VeloResult<u128> {
+    pub async fn ping(&mut self) -> DorisResult<u128> {
         let start = std::time::Instant::now();
         self.query("SELECT 1").await?;
         Ok(start.elapsed().as_millis())

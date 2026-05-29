@@ -8,7 +8,7 @@ resolver = "3"
 name = "doriscli"
 version = "0.3.8"
 edition = "2021"
-description = "Doris CLI — SQL, profiles, and tablet analysis against a Doris/VeloDB kernel"
+description = "Doris CLI — SQL, profiles, and tablet analysis against a Doris kernel"
 
 [[bin]]
 name = "doriscli"

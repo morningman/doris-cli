@@ -1,4 +1,4 @@
-use crate::error::{VeloError, VeloResult};
+use crate::error::{DorisError, DorisResult};
 use crate::product::ProductProfile;
 use serde::{Deserialize, Serialize};
 
@@ -55,7 +55,7 @@ pub struct Socks5Config {
 
 impl Socks5Config {
     /// Build from env vars. Returns None unless both host and port are set.
-    /// user/pass default to "admin"/"admin" per VeloDB BYOC convention.
+    /// user/pass default to "admin"/"admin" by convention.
     pub fn from_env(product: &ProductProfile) -> Option<Self> {
         let host = std::env::var(product.env_key("SOCKS5_HOST")).ok()?;
         let port: u16 = std::env::var(product.env_key("SOCKS5_PORT"))
@@ -75,22 +75,22 @@ impl Socks5Config {
     }
 
     /// Parse `user:pass@host:port` (matches the Go mysql-client reference).
-    pub fn parse_flag(s: &str) -> VeloResult<Self> {
+    pub fn parse_flag(s: &str) -> DorisResult<Self> {
         let (auth, hostport) = s.split_once('@').ok_or_else(|| {
-            VeloError::config(format!(
+            DorisError::config(format!(
                 "--socks5 must be in 'user:pass@host:port' form, got '{s}'"
             ))
         })?;
         let (user, pass) = auth.split_once(':').ok_or_else(|| {
-            VeloError::config(format!("--socks5 auth must be 'user:pass', got '{auth}'"))
+            DorisError::config(format!("--socks5 auth must be 'user:pass', got '{auth}'"))
         })?;
         let (host, port_s) = hostport.rsplit_once(':').ok_or_else(|| {
-            VeloError::config(format!(
+            DorisError::config(format!(
                 "--socks5 host must be 'host:port', got '{hostport}'"
             ))
         })?;
         let port: u16 = port_s.parse().map_err(|_| {
-            VeloError::config(format!("--socks5 port '{port_s}' is not a valid u16"))
+            DorisError::config(format!("--socks5 port '{port_s}' is not a valid u16"))
         })?;
         Ok(Socks5Config {
             host: host.to_string(),

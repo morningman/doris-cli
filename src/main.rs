@@ -39,8 +39,8 @@ async fn main_for(product: &'static ProductProfile) {
             }
         }
         Err(e) => {
-            if let Some(velo_err) = e.downcast_ref::<crate::error::VeloError>() {
-                eprintln!("{}", velo_err.user_message(product));
+            if let Some(doris_err) = e.downcast_ref::<crate::error::DorisError>() {
+                eprintln!("{}", doris_err.user_message(product));
             } else {
                 eprintln!("Error: {e}");
             }
