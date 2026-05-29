@@ -1,0 +1,5 @@
+[products.doris]
+binary = "doriscli"
+about = "Doris CLI - SQL, profiles, and tablet analysis against a Doris/VeloDB kernel"
+config_dir = ".doris"
+env_prefix = "DORIS"
