@@ -36,7 +36,7 @@ _gen_events_sql() {
       typ = t[(i % 4) + 1];
       amt = (i % 100) + 0.5;
       sep = (i == n - 1) ? ";" : ",";
-      printf "(DATE_ADD(\x272024-01-01\x27, INTERVAL %d DAY),%d,\x27%s\x27,%.2f,\x27detail_%d\x27)%s\n",
+      printf "(DATE_ADD(\0472024-01-01\047, INTERVAL %d DAY),%d,\047%s\047,%.2f,\047detail_%d\047)%s\n",
              day, uid, typ, amt, i, sep;
     }
   }'
