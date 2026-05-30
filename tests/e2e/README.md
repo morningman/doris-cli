@@ -51,7 +51,10 @@ Run a subset with `--only "<suites>"`; list them with `--list`.
 ### `cargo test` (offline, unless `--no-unit`)
 The crate's in-tree unit tests — primarily the profile-text parsers
 (`section_parser`, `fragment_parser`, `operator_parser`, `value_parser`). No
-cluster needed.
+cluster needed. Includes `parses_a_real_captured_profile`, an offline regression
+that parses a **real** profile captured by the e2e run (see below) and asserts
+the load-bearing invariants. It's a visible no-op until you commit the fixture
+`tests/e2e/fixtures/sample_profile.txt` that a cluster run generates.
 
 ### `cli` — argument contract (offline)
 `--version` / `-V`, `--help` (usage + subcommand listing), and the error paths:
@@ -86,12 +89,34 @@ stats weren't collected). `UNIQUE` model detection on a second table.
 `--detail` (per-tablet + per-backend) and `--detail --partition` (narrowed to
 one partition). Negative: a missing table exits non-zero.
 
-### `profile` — query profiles (needs cluster; HTTP-gated parts auto-SKIP)
-`profile list` and `list --active` (arrays); `profile get <id>` summary (works
-via the SQL fallback even without HTTP); `get --full`, `get --raw`, and `diff`
-(**require the FE HTTP profile API → SKIP if `http_status != connected`**);
-`profile history` (**requires `__internal_schema.audit_log` → SKIP if absent**);
-and a negative case (unknown query id exits non-zero).
+### `profile` — query profiles (needs cluster **+ the FE HTTP profile API**)
+This suite is the point of the harness: it sends real SQL with `--profile`,
+fetches the **real** profile, and asserts on the **parsed values**, not just the
+JSON shape. It runs three profiled queries — a group-by over `events` (twice) and
+a hash join `events⨝dim_users` — then checks, against the live profile:
+
+- `profile list` / `list --active` → arrays carrying the real `SHOW QUERY
+  PROFILE` fields (MySQL only, always testable).
+- `profile get <id>` → the parsed Profile ID equals the id we sent, the parsed
+  SQL is our query text, `total_time_ms` is a positive parsed number, the
+  operator tree includes a `SCAN` and an `AGG`, `query_stats.total_scan_rows`
+  is ≈ the rows we loaded, and the fragment breakdown is well-formed.
+- `get --full` → the full `fragments→pipelines→operators` tree with populated
+  `all_counters`; `get --raw` → the raw text round-trips (and is **captured as
+  the offline regression fixture**, see below).
+- `profile diff` → two real runs of the same query: parsed totals on both sides
+  and a numeric `time_ratio`.
+- the join query → a `JOIN` operator and ≥2 `SCAN` operators are parsed.
+
+The full profile **text comes only over HTTP** (REST v2 / legacy; the SQL path
+yields summary metadata with no operators). So the FE HTTP profile API is a hard
+requirement: **if `http_status != connected`, these parse tests FAIL, not SKIP**
+— a silent skip behind a green run would hide the entire parser. Two narrower
+conditions still SKIP, because they're cluster preconditions and not parser bugs:
+a profile **evicted** before we could fetch it (raise `max_query_profile_num`),
+and `profile history`, which needs `__internal_schema.audit_log`. Operator→table
+attribution auto-SKIPs on pre-4.0 Doris (its operator headers omit `table_name`).
+A negative case (unknown query id exits non-zero) rounds it out.
 
 ## The seed data
 
@@ -117,8 +142,9 @@ See `./start-testing.sh --help`. Highlights: `--only`, `--no-unit`, `--keep`,
 
 - **MySQL/query port** (default 9030) is required for everything.
 - **FE HTTP port** (default 8030; cloud often **8080**) enables `auth status`'s
-  HTTP probe and the `profile get --full/--raw` and `profile diff` paths.
-  Without it those tests SKIP rather than fail.
+  HTTP probe and is **required by the whole `profile` suite** — it's the only
+  source of profile text, so without it the profile parse tests **FAIL** (they
+  used to SKIP). Point `--http-port` at the right port before running `profile`.
 - **Cloud / storage-compute**: set `DORIS_TEST_INIT_SQL='USE @<compute_group>'`
   so queries run against a live compute group; otherwise setup fails early with
   a hint.

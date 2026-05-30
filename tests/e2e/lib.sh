@@ -137,6 +137,21 @@ expect_json() {
   record_pass "$name"
 }
 
+# expect_parsed "<name>" [jq-args...] '<filter>'
+#   Assert a jq filter against the LAST captured $OUT (from a prior _run_dcli),
+#   WITHOUT re-running the command. The profile suite fetches one real profile and
+#   then makes many assertions on it; re-running per assertion would re-hit the FE
+#   and risk the profile being evicted mid-suite. Extra jq args (e.g.
+#   `--arg q "$qid"`) may precede the filter. Records exactly one PASS or FAIL.
+expect_parsed() {
+  local name="$1"; shift
+  if printf '%s' "$OUT" | jq -e "$@" >/dev/null 2>&1; then
+    record_pass "$name"
+  else
+    record_fail "$name" "assertion failed [ $* ]; got: $(_oneline "$OUT")"
+  fi
+}
+
 # expect_ok "<name>" <doriscli args...>  — just requires exit 0 (raw, no --format).
 expect_ok() {
   local name="$1"; shift
@@ -179,6 +194,19 @@ skip() { record_skip "$1" "$2"; }
 
 # jget '<jq filter>' — echo a scalar pulled from the last OUT (raw -r). Empty on error.
 jget() { printf '%s' "$OUT" | jq -r "$1" 2>/dev/null; }
+
+# _capture_profile_fixture — persist the current `profile get --raw` $OUT (a JSON
+# string holding the raw profile text) as the offline parser regression fixture.
+# Doing it from a live run means the fixture is always a REAL Doris profile.
+# Committing the generated file activates the cargo test in
+# src/parser/profile_parser.rs (which is a visible no-op until the file exists).
+_capture_profile_fixture() {
+  local dir="$REPO_ROOT/tests/e2e/fixtures"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  if printf '%s' "$OUT" | jq -r . > "$dir/sample_profile.txt" 2>/dev/null; then
+    log "  ${C_DIM}captured real profile -> tests/e2e/fixtures/sample_profile.txt (commit it to activate the offline parser regression test)${C_RESET}"
+  fi
+}
 
 # ---- final summary -------------------------------------------------------
 print_summary() {

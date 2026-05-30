@@ -39,9 +39,10 @@ suite_sql() {
     '.rows_returned==1' \
     sql "SELECT 1 AS one" --no-cache
 
-  # --profile: produces a non-empty query_id (reused by the profile suite).
-  expect_json "sql: --profile yields a query_id" \
-    '(.query_id|type=="string") and ((.query_id|length)>0)' \
+  # --profile: produces a real Doris query id (TUniqueId rendered as hex-hi-hex-lo,
+  # e.g. "a1b2c3d4...-e5f6..."), reused by the profile suite to fetch the profile.
+  expect_json "sql: --profile yields a real Doris query_id" \
+    '(.query_id|type=="string") and (.query_id|test("^[0-9a-fA-F]+-[0-9a-fA-F]+$"))' \
     sql "SELECT 2 AS two" --profile
 
   # Output formats: a TTY-style table and CSV both carry the column header.
@@ -55,9 +56,10 @@ suite_sql() {
     '.rows_returned==0 and (.rows==[])' \
     sql "SELECT table_name FROM information_schema.tables WHERE 1=0"
 
-  # End-to-end against loaded data: row count matches what setup loaded.
+  # End-to-end against loaded data: row count matches what setup loaded, and the
+  # envelope reports a real (non-negative) execution time for a query that ran.
   expect_json "sql: count over loaded table matches the load" \
-    '.rows[0].c=='"${ROWS:-2000}" \
+    '.rows[0].c=='"${ROWS:-2000}"' and (.exec_time_ms|type=="number") and (.exec_time_ms>=0)' \
     sql "SELECT COUNT(*) AS c FROM \`$CFG_DB\`.events"
 
   # Error path: a bad reference exits non-zero with an "SQL error:" message.

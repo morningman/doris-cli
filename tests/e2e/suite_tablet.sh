@@ -37,14 +37,19 @@ suite_tablet() {
     '.model=="UNIQUE"' \
     tablet "$dim"
 
-  # --detail: per-tablet + per-backend distribution. 2 partitions x 4 buckets = 8 tablets.
-  expect_json "tablet: --detail lists tablets and backends" \
-    '(.partitions|type=="array") and (.tablets|type=="array") and ((.tablets|length)>=8) and (.backends|type=="array")' \
+  # --detail: per-tablet + per-backend distribution. 2 partitions x 4 buckets = 8
+  # tablets. Assert each tablet/backend row carries its real identifying fields,
+  # not just that the arrays exist.
+  expect_json "tablet: --detail lists tablets and backends with real fields" \
+    '(.partitions|type=="array") and ((.tablets|length)>=8) and ((.backends|length)>=1)
+     and (.tablets|all(has("tablet_id") and has("backend_id") and has("partition") and has("row_count")))
+     and (.backends|all(has("backend_id") and has("tablet_count")))' \
     tablet "$events" --detail
 
-  # --partition narrows to one partition's 4 tablets.
+  # --partition narrows to one partition's 4 tablets, and every tablet returned
+  # is actually attributed to that partition.
   expect_json "tablet: --detail --partition filters to one partition" \
-    '((.partitions|length)==1) and (.partitions[0].name=="p20240101") and ((.tablets|length)==4)' \
+    '((.partitions|length)==1) and (.partitions[0].name=="p20240101") and ((.tablets|length)==4) and (.tablets|all(.partition=="p20240101"))' \
     tablet "$events" --detail --partition p20240101
 
   # Negative: a missing table errors (SHOW CREATE TABLE fails).
