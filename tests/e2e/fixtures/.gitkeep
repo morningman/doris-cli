@@ -1,0 +1,6 @@
+# Captured real Doris profiles used as offline parser regression fixtures.
+#
+# tests/e2e/suite_profile.sh writes sample_profile.txt here on a successful
+# `profile get --raw` against a live cluster. Commit the generated file to
+# activate the `parses_a_real_captured_profile` test in
+# src/parser/profile_parser.rs (it is a no-op until the fixture exists).

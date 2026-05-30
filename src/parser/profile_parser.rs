@@ -73,6 +73,44 @@ pub fn parse(raw_text: &str) -> DorisProfile {
 }
 
 fn parse_session_vars(text: &str) -> Vec<SessionVar> {
+    let trimmed = text.trim();
+
+    // Newer Doris emits this section as a JSON array of
+    // [{VarName, CurrentValue, DefaultValue}, ...]; older versions use a
+    // pipe-delimited table. Try JSON first, then fall back to the table parser.
+    if trimmed.starts_with('[') {
+        if let Ok(serde_json::Value::Array(items)) =
+            serde_json::from_str::<serde_json::Value>(trimmed)
+        {
+            let vars: Vec<SessionVar> = items
+                .iter()
+                .filter_map(|item| {
+                    let name = item.get("VarName").and_then(|v| v.as_str())?;
+                    if name.is_empty() {
+                        return None;
+                    }
+                    Some(SessionVar {
+                        name: name.to_string(),
+                        current_value: item
+                            .get("CurrentValue")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        default_value: item
+                            .get("DefaultValue")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                    })
+                })
+                .collect();
+            if !vars.is_empty() {
+                return vars;
+            }
+        }
+    }
+
+    // Legacy pipe-delimited table: "VarName | CurrentValue | DefaultValue".
     let mut vars = Vec::new();
     for line in text.lines() {
         let line = line.trim();
@@ -305,4 +343,110 @@ pub fn flatten_operators(profile: &DorisProfile) -> Vec<FlatOperator> {
 
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
+}
+
+#[cfg(test)]
+mod real_profile_tests {
+    use super::*;
+
+    /// A REAL Doris profile captured by the e2e harness: `suite_profile.sh` writes
+    /// it on a successful `profile get --raw`. Committing that file turns this into
+    /// an offline regression guard for the whole parse pipeline; until it exists the
+    /// test is a visible no-op (it prints how to produce the fixture and returns).
+    fn fixture_path() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/e2e/fixtures/sample_profile.txt")
+    }
+
+    /// WHY this test exists: the parser's contract is to turn an opaque profile
+    /// text into a structured tree the diagnosis commands can rely on. A unit test
+    /// over a hand-written snippet can't catch a real-profile-only regression (a
+    /// section header that moved, a counter format that changed). This parses an
+    /// actual captured profile and asserts the load-bearing invariants every
+    /// downstream command depends on — so it FAILS if any of them break.
+    #[test]
+    fn parses_a_real_captured_profile() {
+        let path = fixture_path();
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) if !t.trim().is_empty() => t,
+            _ => {
+                eprintln!(
+                    "SKIP parses_a_real_captured_profile: no fixture at {}.\n  \
+                     Run ./start-testing.sh against a cluster, then commit\n  \
+                     tests/e2e/fixtures/sample_profile.txt to activate this test.",
+                    path.display()
+                );
+                return;
+            }
+        };
+
+        let profile = parse(&text);
+
+        // Summary: a real profile must yield a non-empty Profile ID and a positive
+        // total time (proves the Summary section + duration parsing both worked).
+        assert!(
+            !profile.summary.query_id.is_empty(),
+            "summary.query_id must be parsed from a real profile"
+        );
+        assert!(
+            profile.summary.total_time_ms.unwrap_or(0.0) > 0.0,
+            "summary.total_time_ms must parse to a positive number, got {:?}",
+            profile.summary.total_time_ms
+        );
+
+        // Structure: at least one fragment with at least one pipeline of operators
+        // (proves MergedProfile -> fragment -> pipeline -> operator parsing worked).
+        assert!(
+            !profile.fragments.is_empty(),
+            "a real profile must yield at least one fragment"
+        );
+        assert!(
+            profile
+                .fragments
+                .iter()
+                .any(|f| f.pipelines.iter().any(|p| !p.operators.is_empty())),
+            "at least one fragment must contain operators"
+        );
+
+        // Flattening: the diagnosis surface must be non-empty, every operator named,
+        // and sorted by exec_time descending (the head is the slowest).
+        let flat = flatten_operators(&profile);
+        assert!(
+            !flat.is_empty(),
+            "flatten_operators must yield operators for a real profile"
+        );
+        assert!(
+            flat.iter().all(|op| !op.name.is_empty()),
+            "every flattened operator must carry a name"
+        );
+        assert!(
+            flat.windows(2)
+                .all(|w| w[0].exec_time_avg_ms >= w[1].exec_time_avg_ms),
+            "flattened operators must be sorted by exec_time_avg_ms descending"
+        );
+
+        // Regression: DetailProfile / Appendix must be section boundaries, not bleed
+        // into MergedProfile and fabricate empty fragments — every parsed fragment has
+        // real pipelines.
+        assert!(
+            profile.fragments.iter().all(|f| !f.pipelines.is_empty()),
+            "no parsed fragment may be empty (DetailProfile/Appendix must terminate MergedProfile)"
+        );
+
+        // Regression: the Changed Session Variables section is parsed (JSON-array or
+        // pipe-table form). A profile captured by the e2e harness ran with --profile,
+        // which always changes at least `enable_profile`.
+        assert!(
+            !profile.changed_session_vars.is_empty(),
+            "changed_session_vars must be parsed from a real profile"
+        );
+
+        // Regression: the Physical Plan section is recognized regardless of spelling
+        // ("PhysicalPlan" vs "Physical Plan").
+        let sections = section_parser::split_sections(&section_parser::normalize_text(&text));
+        assert!(
+            sections.contains_key("Physical Plan"),
+            "the Physical Plan section must be extracted"
+        );
+    }
 }
